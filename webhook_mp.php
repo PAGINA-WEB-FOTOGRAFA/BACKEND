@@ -132,7 +132,7 @@ function enviarMailVenta(array $venta, array $fotos): void
 
     $cabeceras  = "MIME-Version: 1.0\r\n";
     $cabeceras .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $cabeceras .= "From: no-reply@localhost\r\n";
+    $cabeceras .= "From: Fotografía <" . MAIL_FROM . ">\r\n";
 
     if (!mail(ADMIN_EMAIL, $asunto, $cuerpo, $cabeceras)) {
         error_log('No se pudo enviar el mail de la venta #' . $venta['id']);

@@ -7,7 +7,7 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Access-Control-Max-Age: 86400');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
@@ -33,3 +33,6 @@ define('WEB_FAILURE_URL', '');
 // ==== Notificaciones por email ====
 // Gmail de la administradora que recibe la venta cuando el pago se confirma.
 define('ADMIN_EMAIL', 'webxiadev@gmail.com');
+
+// Remitente de los correos (Gmail obliga a que coincida con la cuenta SMTP autenticada).
+define('MAIL_FROM', ADMIN_EMAIL);
