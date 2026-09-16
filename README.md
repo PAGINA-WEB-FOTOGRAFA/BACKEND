@@ -134,13 +134,13 @@ Acepta JSON o multipart. Campos opcionales: `nombre`, `lugar`, `fecha_evento`, `
 {
   "nombre": "Ana",
   "apellido": "Pérez",
-  "whatsapp": "11 5555 1234",
+  "telefono": "11 5555 1234",
   "email": "ana@mail.com",
   "fotos_ids": [1, 2]
 }
 ```
 
-El total se calcula en el servidor (suma del `precio_foto` de cada evento). Respuesta:
+El total se calcula en el servidor (suma del `precio_foto` de cada evento). `telefono` (o `whatsapp`) es obligatorio; `apellido` es opcional. Respuesta:
 
 ```json
 {

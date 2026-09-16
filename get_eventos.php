@@ -25,7 +25,13 @@ try {
 
         $stmtFotos = $pdo->prepare("SELECT id, ruta FROM fotos WHERE evento_id = ? ORDER BY id ASC");
         $stmtFotos->execute([$id]);
-        $evento['fotos'] = $stmtFotos->fetchAll();
+        $fotos = $stmtFotos->fetchAll();
+        $fotos = array_map(function ($foto) use ($evento) {
+            $foto['precio']        = $evento['precio_foto'];
+            $foto['evento_nombre'] = $evento['nombre'];
+            return $foto;
+        }, $fotos);
+        $evento['fotos'] = $fotos;
 
         echo json_encode(["status" => "success", "evento" => $evento], JSON_UNESCAPED_UNICODE);
         exit;

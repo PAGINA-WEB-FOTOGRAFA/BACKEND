@@ -17,13 +17,13 @@ if (!is_array($input)) {
 
 $nombre     = trim((string) ($input['nombre'] ?? ''));
 $apellido   = trim((string) ($input['apellido'] ?? ''));
-$whatsapp   = trim((string) ($input['whatsapp'] ?? ''));
+$whatsapp   = trim((string) ($input['whatsapp'] ?? ($input['telefono'] ?? '')));
 $email      = trim((string) ($input['email'] ?? ''));
 $fotosEntrada = $input['fotos_ids'] ?? [];
 
-if ($nombre === '' || $apellido === '' || $whatsapp === '') {
+if ($nombre === '' || $whatsapp === '') {
     http_response_code(400);
-    echo json_encode(["status" => "error", "message" => "Los campos nombre, apellido y whatsapp son obligatorios."], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["status" => "error", "message" => "Los campos nombre y telefono son obligatorios."], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
