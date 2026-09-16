@@ -1,0 +1,35 @@
+CREATE DATABASE IF NOT EXISTS fotografo_db;
+USE fotografo_db;
+
+-- 1. Tabla de eventos
+CREATE TABLE IF NOT EXISTS eventos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    lugar VARCHAR(150) NOT NULL,
+    precio_foto DECIMAL(10, 2) NOT NULL,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Tabla de fotos asociadas al evento
+CREATE TABLE IF NOT EXISTS fotos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    evento_id INT NOT NULL,
+    ruta VARCHAR(255) NOT NULL,
+    FOREIGN KEY (evento_id) REFERENCES eventos(id) ON DELETE CASCADE
+);
+
+-- 3. Tabla de ventas con los 5 datos mínimos del comprador
+CREATE TABLE IF NOT EXISTS ventas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    evento_id INT NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100) NOT NULL,
+    whatsapp VARCHAR(50) NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    total DECIMAL(10, 2) NOT NULL,
+    fotos_ids TEXT NOT NULL,
+    estado VARCHAR(20) DEFAULT 'pendiente',
+    mp_preference_id VARCHAR(255) NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (evento_id) REFERENCES eventos(id)
+);
