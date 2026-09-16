@@ -16,12 +16,12 @@ if (!is_array($input)) {
     exit;
 }
 
-$usuario  = trim((string) ($input['usuario'] ?? ''));
+$usuario  = trim((string) ($input['email'] ?? ($input['usuario'] ?? '')));
 $password = (string) ($input['password'] ?? '');
 
 if ($usuario === '' || $password === '') {
     http_response_code(400);
-    echo json_encode(["status" => "error", "message" => "Los campos usuario y password son obligatorios."], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["status" => "error", "message" => "Los campos email y password son obligatorios."], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

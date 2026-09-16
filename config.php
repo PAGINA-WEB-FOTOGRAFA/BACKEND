@@ -39,10 +39,11 @@ define('MAIL_FROM', ADMIN_EMAIL);
 
 // ==== Acceso administrador ====
 // Usuario y contraseña (hash) del panel de administración.
-// La contraseña actual del usuario 'admin' es: Fotografia2026!
+// El usuario admin es un email (así lo valida el formulario de login).
+// La contraseña actual es: Fotografia2026!
 // Para cambiarla: php -r "echo password_hash('TU_NUEVA_CLAVE', PASSWORD_DEFAULT);"
 // y reemplazás el hash de abajo.
-define('ADMIN_USER', 'admin');
+define('ADMIN_USER', 'webxiadev@gmail.com');
 define('ADMIN_PASS_HASH', '$2y$10$rpV0AbOV87DwDr1uMp5mr.vzpr9g0AkQe8ZOeD0C1KDigC2cmlQWe');
 
 // Clave secreta para firmar los tokens (cambiarla por una propia, p.ej. con random_bytes).
