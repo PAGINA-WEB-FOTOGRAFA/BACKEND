@@ -36,3 +36,17 @@ define('ADMIN_EMAIL', 'webxiadev@gmail.com');
 
 // Remitente de los correos (Gmail obliga a que coincida con la cuenta SMTP autenticada).
 define('MAIL_FROM', ADMIN_EMAIL);
+
+// ==== Acceso administrador ====
+// Usuario y contraseña (hash) del panel de administración.
+// La contraseña actual del usuario 'admin' es: Fotografia2026!
+// Para cambiarla: php -r "echo password_hash('TU_NUEVA_CLAVE', PASSWORD_DEFAULT);"
+// y reemplazás el hash de abajo.
+define('ADMIN_USER', 'admin');
+define('ADMIN_PASS_HASH', '$2y$10$rpV0AbOV87DwDr1uMp5mr.vzpr9g0AkQe8ZOeD0C1KDigC2cmlQWe');
+
+// Clave secreta para firmar los tokens (cambiarla por una propia, p.ej. con random_bytes).
+define('TOKEN_SECRET', 'b6eb624c49a9a117089e28b672e9b432b0182dfa21e213a99e741f17791c6e1b');
+
+// Horas de validez del token de sesión.
+define('TOKEN_TTL_HORAS', 12);

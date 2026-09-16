@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -30,8 +31,9 @@ try {
         exit;
     }
 
-    // ?admin=true => todos los eventos
+    // ?admin=true => todos los eventos (solo administrador)
     if (isset($_GET['admin']) && $_GET['admin'] === 'true') {
+        requireAuth();
         $eventos = $pdo->query("SELECT * FROM eventos ORDER BY fecha_evento DESC, fecha_creacion DESC")->fetchAll();
     } else {
         // Por defecto (cliente) => solo eventos activos
