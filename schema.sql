@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS eventos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL,
     lugar VARCHAR(150) NOT NULL,
+    fecha_evento DATE NOT NULL,
     precio_foto DECIMAL(10, 2) NOT NULL,
+    activo TINYINT(1) DEFAULT 1,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -18,7 +20,7 @@ CREATE TABLE IF NOT EXISTS fotos (
     FOREIGN KEY (evento_id) REFERENCES eventos(id) ON DELETE CASCADE
 );
 
--- 3. Tabla de ventas con los 5 datos mínimos del comprador
+-- 3. Tabla de ventas
 CREATE TABLE IF NOT EXISTS ventas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     evento_id INT NOT NULL,
