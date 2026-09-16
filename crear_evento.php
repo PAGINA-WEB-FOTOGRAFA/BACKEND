@@ -45,6 +45,8 @@ if (!is_dir($uploadsDir)) {
 
 // Sube las imágenes con nombre único (timestamp + uniqid) antes de tocar la BD
 $archivosMovidos = [];
+$finfo = finfo_open(FILEINFO_MIME_TYPE);
+
 if (isset($_FILES['fotos']) && is_array($_FILES['fotos']['name'])) {
     $mimes = [
         'image/jpeg' => 'jpg',
@@ -52,8 +54,6 @@ if (isset($_FILES['fotos']) && is_array($_FILES['fotos']['name'])) {
         'image/webp' => 'webp',
         'image/gif'  => 'gif',
     ];
-
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
 
     foreach ($_FILES['fotos']['name'] as $i => $nombreOriginal) {
         if ((int) $_FILES['fotos']['error'][$i] !== UPLOAD_ERR_OK) {
@@ -76,15 +76,40 @@ if (isset($_FILES['fotos']) && is_array($_FILES['fotos']['name'])) {
             ];
         }
     }
-
-    finfo_close($finfo);
 }
+
+// Sube la imagen de portada (opcional)
+$portadaRuta   = null;
+$portadaFisica = null;
+if (isset($_FILES['portada']) && is_array($_FILES['portada']) && (int) $_FILES['portada']['error'] === UPLOAD_ERR_OK) {
+    $mimes = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp',
+        'image/gif'  => 'gif',
+    ];
+
+    $nombreOriginal = $_FILES['portada']['name'];
+    $mime           = finfo_file($finfo, $_FILES['portada']['tmp_name']);
+
+    if ($nombreOriginal !== '' && isset($mimes[$mime])) {
+        $nombreArchivo = time() . '_' . uniqid() . '.' . $mimes[$mime];
+        $rutaFisica    = $uploadsDir . '/' . $nombreArchivo;
+
+        if (move_uploaded_file($_FILES['portada']['tmp_name'], $rutaFisica)) {
+            $portadaRuta   = 'uploads/' . $nombreArchivo;
+            $portadaFisica = $rutaFisica;
+        }
+    }
+}
+
+finfo_close($finfo);
 
 try {
     $pdo->beginTransaction();
 
-    $stmt = $pdo->prepare("INSERT INTO eventos (nombre, lugar, fecha_evento, precio_foto) VALUES (?, ?, ?, ?)");
-    $stmt->execute([$nombre, $lugar, $fechaEvento, $precioFoto]);
+    $stmt = $pdo->prepare("INSERT INTO eventos (nombre, lugar, fecha_evento, precio_foto, portada) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$nombre, $lugar, $fechaEvento, $precioFoto, $portadaRuta]);
     $eventoId = (int) $pdo->lastInsertId();
 
     $stmtFoto = $pdo->prepare("INSERT INTO fotos (evento_id, ruta) VALUES (?, ?)");
@@ -108,6 +133,7 @@ try {
             "lugar"        => $lugar,
             "fecha_evento" => $fechaEvento,
             "precio_foto"  => $precioFoto,
+            "portada"      => $portadaRuta,
             "activo"       => 1,
             "fotos"        => $fotosRegistradas,
         ],
@@ -121,6 +147,10 @@ try {
         if (file_exists($archivo['rutaFisica'])) {
             @unlink($archivo['rutaFisica']);
         }
+    }
+
+    if ($portadaFisica !== null && file_exists($portadaFisica)) {
+        @unlink($portadaFisica);
     }
 
     http_response_code(500);

@@ -8,9 +8,13 @@ CREATE TABLE IF NOT EXISTS eventos (
     lugar VARCHAR(150) NOT NULL,
     fecha_evento DATE NOT NULL,
     precio_foto DECIMAL(10, 2) NOT NULL,
+    portada VARCHAR(255) NULL,
     activo TINYINT(1) DEFAULT 1,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Si ya tenés la tabla creada, agregá la columna portada con:
+-- ALTER TABLE eventos ADD COLUMN portada VARCHAR(255) NULL;
 
 -- 2. Tabla de fotos asociadas al evento
 CREATE TABLE IF NOT EXISTS fotos (

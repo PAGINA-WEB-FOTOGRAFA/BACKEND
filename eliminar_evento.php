@@ -32,9 +32,10 @@ try {
     $stmtFotos->execute([$id]);
     $fotos = $stmtFotos->fetchAll();
 
-    $check = $pdo->prepare("SELECT id FROM eventos WHERE id = ?");
+    $check = $pdo->prepare("SELECT id, portada FROM eventos WHERE id = ?");
     $check->execute([$id]);
-    if (!$check->fetch()) {
+    $evento = $check->fetch();
+    if (!$evento) {
         http_response_code(404);
         echo json_encode(["status" => "error", "message" => "Evento no encontrado."], JSON_UNESCAPED_UNICODE);
         exit;
@@ -53,6 +54,13 @@ try {
         $archivo = __DIR__ . '/' . $foto['ruta'];
         if (file_exists($archivo)) {
             @unlink($archivo);
+        }
+    }
+
+    if (!empty($evento['portada'])) {
+        $archivoPortada = __DIR__ . '/' . $evento['portada'];
+        if (file_exists($archivoPortada)) {
+            @unlink($archivoPortada);
         }
     }
 

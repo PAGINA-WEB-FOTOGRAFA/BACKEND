@@ -78,7 +78,7 @@ $fotosEliminar = array_values(array_unique($fotosEliminar));
 
 // Crea el directorio uploads/ si hará falta para fotos nuevas
 $uploadsDir = __DIR__ . '/uploads';
-if (!empty($_FILES['fotos']['name']) && !is_dir($uploadsDir)) {
+if ((!empty($_FILES['fotos']['name']) || !empty($_FILES['portada']['name'])) && !is_dir($uploadsDir)) {
     if (!mkdir($uploadsDir, 0777, true) && !is_dir($uploadsDir)) {
         http_response_code(500);
         echo json_encode(["status" => "error", "message" => "No se pudo crear el directorio uploads/."], JSON_UNESCAPED_UNICODE);
@@ -123,6 +123,34 @@ if (!$esJson && isset($_FILES['fotos']) && is_array($_FILES['fotos']['name'])) {
     finfo_close($finfo);
 }
 
+// Portada nueva (FormData con portada, reemplaza la anterior)
+$portadaNueva = null;
+if (!$esJson && isset($_FILES['portada']) && is_array($_FILES['portada']) && (int) $_FILES['portada']['error'] === UPLOAD_ERR_OK) {
+    $mimes = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp',
+        'image/gif'  => 'gif',
+    ];
+
+    $finfo          = finfo_open(FILEINFO_MIME_TYPE);
+    $nombreOriginal = $_FILES['portada']['name'];
+    $mime           = finfo_file($finfo, $_FILES['portada']['tmp_name']);
+    finfo_close($finfo);
+
+    if ($nombreOriginal !== '' && isset($mimes[$mime])) {
+        $nombreArchivo = time() . '_' . uniqid() . '.' . $mimes[$mime];
+        $rutaFisica    = $uploadsDir . '/' . $nombreArchivo;
+
+        if (move_uploaded_file($_FILES['portada']['tmp_name'], $rutaFisica)) {
+            $portadaNueva = [
+                'rutaFisica' => $rutaFisica,
+                'ruta'       => 'uploads/' . $nombreArchivo,
+            ];
+        }
+    }
+}
+
 try {
     $check = $pdo->prepare("SELECT id FROM eventos WHERE id = ?");
     $check->execute([$id]);
@@ -139,6 +167,16 @@ try {
         $params[] = $id;
         $sql = "UPDATE eventos SET " . implode(', ', $actualizaciones) . " WHERE id = ?";
         $pdo->prepare($sql)->execute($params);
+    }
+
+    // Reemplaza la portada
+    $portadaAnterior = null;
+    if ($portadaNueva !== null) {
+        $stmtP = $pdo->prepare("SELECT portada FROM eventos WHERE id = ?");
+        $stmtP->execute([$id]);
+        $portadaAnterior = $stmtP->fetchColumn();
+
+        $pdo->prepare("UPDATE eventos SET portada = ? WHERE id = ?")->execute([$portadaNueva['ruta'], $id]);
     }
 
     // Elimina fotos (BD + archivo físico)
@@ -178,10 +216,19 @@ try {
 
     $pdo->commit();
 
+    // Borra la portada anterior del disco
+    if ($portadaAnterior && $portadaAnterior !== ($portadaNueva['ruta'] ?? null)) {
+        $archivoViejo = __DIR__ . '/' . $portadaAnterior;
+        if (file_exists($archivoViejo)) {
+            @unlink($archivoViejo);
+        }
+    }
+
     echo json_encode([
         "status"          => "success",
         "message"         => "Evento actualizado correctamente.",
         "id"              => $id,
+        "portada"         => $portadaNueva ? $portadaNueva['ruta'] : null,
         "fotos_agregadas" => $fotosAgregadas,
         "fotos_borradas"  => $fotosBorradas,
     ], JSON_UNESCAPED_UNICODE);
@@ -194,6 +241,10 @@ try {
         if (file_exists($archivo['rutaFisica'])) {
             @unlink($archivo['rutaFisica']);
         }
+    }
+
+    if ($portadaNueva !== null && file_exists($portadaNueva['rutaFisica'])) {
+        @unlink($portadaNueva['rutaFisica']);
     }
 
     http_response_code(500);
