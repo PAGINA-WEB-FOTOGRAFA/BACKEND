@@ -80,15 +80,15 @@ try {
         $stmtVf->execute([$ventaId, $foto['id'], number_format((float) $foto['precio_foto'], 2, '.', '')]);
     }
 
-    // Crea la preferencia de pago en Mercado Pago
+    // Crea la order de pago en Mercado Pago (Orders API de Checkout Pro)
     $items = [];
     foreach ($fotos as $foto) {
         $item = [
-            'id'          => (string) $foto['id'],
-            'title'       => 'Foto - ' . $foto['evento_nombre'],
-            'quantity'    => 1,
-            'unit_price'  => (float) $foto['precio_foto'],
-            'currency_id' => 'ARS',
+            'external_code' => (string) $foto['id'],
+            'title'         => 'Foto - ' . $foto['evento_nombre'],
+            'description'   => 'Fotografía digital del evento ' . $foto['evento_nombre'],
+            'quantity'      => 1,
+            'unit_price'    => number_format((float) $foto['precio_foto'], 2, '.', ''),
         ];
         if (BACKEND_URL !== '') {
             $item['picture_url'] = BACKEND_URL . '/' . $foto['ruta'];
@@ -96,27 +96,33 @@ try {
         $items[] = $item;
     }
 
-    $preferencia = [
-        'items'                => $items,
-        'external_reference'   => (string) $ventaId,
-        'statement_descriptor' => 'FOTOGRAFIAS',
-        'auto_return'          => 'approved',
+    $orden = [
+        'type'               => 'online',
+        'total_amount'       => $totalStr,
+        'external_reference' => (string) $ventaId,
+        'processing_mode'    => 'manual',
+        'capture_mode'       => 'automatic_async',
+        'payer'              => ['email' => $email],
+        'config'             => ['statement_descriptor' => 'FOTOGRAFIAS'],
+        'items'              => $items,
     ];
 
-    if (BACKEND_URL !== '') {
-        $preferencia['notification_url'] = BACKEND_URL . '/webhook_mp.php';
-    }
-
+    // Las URLs post-pago van en config.online (en Orders no existe back_urls).
+    // auto_return solo es válido si se define success_url.
     $urlsWeb = array_filter([WEB_SUCCESS_URL, WEB_PENDING_URL, WEB_FAILURE_URL]);
     if (count($urlsWeb) === 3) {
-        $preferencia['back_urls'] = [
-            'success' => WEB_SUCCESS_URL,
-            'pending' => WEB_PENDING_URL,
-            'failure' => WEB_FAILURE_URL,
+        $orden['config']['online'] = [
+            'success_url' => WEB_SUCCESS_URL,
+            'pending_url' => WEB_PENDING_URL,
+            'failure_url' => WEB_FAILURE_URL,
+            'auto_return' => 'approved',
         ];
     }
 
-    $respuesta = crearPreferenciaMP($preferencia);
+    // En Orders API la URL del webhook se configura en el panel de
+    // Mercado Pago (Tus integraciones > Webhooks), no en el payload.
+
+    $respuesta = crearOrderMP($orden);
 
     if (($respuesta['success'] ?? false) === false) {
         $pdo->rollBack();
@@ -126,16 +132,17 @@ try {
     }
 
     $stmtUpd = $pdo->prepare("UPDATE ventas SET mp_preference_id = ? WHERE id = ?");
-    $stmtUpd->execute([$respuesta['preference_id'], $ventaId]);
+    $stmtUpd->execute([$respuesta['order_id'], $ventaId]);
 
     $pdo->commit();
 
     echo json_encode([
-        "status"        => "success",
-        "message"       => "Venta registrada. Redirigiendo a Mercado Pago...",
-        "venta_id"      => $ventaId,
-        "mp_preference_id" => $respuesta['preference_id'],
-        "init_point"    => $respuesta['init_point'],
+        "status"       => "success",
+        "message"      => "Venta registrada. Redirigiendo a Mercado Pago...",
+        "venta_id"     => $ventaId,
+        "mp_order_id"  => $respuesta['order_id'],
+        "checkout_url" => $respuesta['checkout_url'],
+        "init_point"   => $respuesta['checkout_url'],
     ], JSON_UNESCAPED_UNICODE);
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {
@@ -147,16 +154,26 @@ try {
 }
 
 /**
- * Crea una preferencia de pago en Mercado Pago.
- * @return array ['success' => bool, 'preference_id' => string, 'init_point' => string, 'message' => string]
+ * Crea una order de Checkout Pro en Mercado Pago (Orders API).
+ * @return array ['success' => bool, 'order_id' => string, 'checkout_url' => string, 'message' => string]
  */
-function crearPreferenciaMP(array $payload): array
+function crearOrderMP(array $payload): array
 {
     if (MP_ACCESS_TOKEN === '') {
         return ['success' => false, 'message' => 'Access token de Mercado Pago no configurado.'];
     }
 
-    $ch = curl_init(MP_BASE_URL . '/checkout/preferences');
+    // Clave de idempotencia única por intento (obligatoria en /v1/orders).
+    $idempotency = sprintf(
+        '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        random_int(0, 0xffff), random_int(0, 0xffff),
+        random_int(0, 0xffff),
+        random_int(0, 0x0fff) | 0x4000,
+        random_int(0, 0x3fff) | 0x8000,
+        random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0xffff)
+    );
+
+    $ch = curl_init(MP_BASE_URL . '/v1/orders');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
@@ -164,6 +181,7 @@ function crearPreferenciaMP(array $payload): array
         'Authorization: Bearer ' . MP_ACCESS_TOKEN,
         'Content-Type: application/json',
         'Accept: application/json',
+        'X-Idempotency-Key: ' . $idempotency,
     ]);
 
     $respuestaRaw = curl_exec($ch);
@@ -177,11 +195,11 @@ function crearPreferenciaMP(array $payload): array
 
     $respuesta = json_decode($respuestaRaw, true);
 
-    if ($httpCode >= 200 && $httpCode < 300 && isset($respuesta['id']) && isset($respuesta['init_point'])) {
+    if ($httpCode >= 200 && $httpCode < 300 && isset($respuesta['id']) && isset($respuesta['checkout_url'])) {
         return [
-            'success'       => true,
-            'preference_id' => (string) $respuesta['id'],
-            'init_point'    => (string) $respuesta['init_point'],
+            'success'      => true,
+            'order_id'     => (string) $respuesta['id'],
+            'checkout_url' => (string) $respuesta['checkout_url'],
         ];
     }
 

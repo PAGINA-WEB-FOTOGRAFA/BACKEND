@@ -27,7 +27,12 @@ if ($paymentId === '') {
 }
 
 try {
-    $pago = getPagoMP((string) $paymentId);
+    // En modo de prueba (desarrollo) se confía en el body de la notificación.
+    if (WEBHOOK_TEST_MODE !== '') {
+        $pago = $data['data'] ?? $data;
+    } else {
+        $pago = getPagoMP((string) $paymentId);
+    }
 
     if (empty($pago) || !isset($pago['status'])) {
         http_response_code(200);

@@ -1,3 +1,6 @@
 uploads/*
 !uploads/.gitignore
 !uploads/schema.sql
+
+# Configuracion local con credenciales (token MP). Usar config.example.php como plantilla.
+config.php
