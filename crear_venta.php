@@ -1,9 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
 
-// Config: correo de la fotógrafa que recibe las notificaciones de venta
-$correoFotografa = 'fotografa@example.com';
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(["status" => "error", "message" => "Método no permitido. Use POST."], JSON_UNESCAPED_UNICODE);
@@ -18,23 +15,15 @@ if (!is_array($input)) {
     exit;
 }
 
-$eventoId = isset($input['evento_id']) ? (int) $input['evento_id'] : 0;
-$nombre   = trim((string) ($input['nombre'] ?? ''));
-$apellido = trim((string) ($input['apellido'] ?? ''));
-$whatsapp = trim((string) ($input['whatsapp'] ?? ''));
-$email    = trim((string) ($input['email'] ?? ''));
-$total    = trim((string) ($input['total'] ?? ''));
-$fotosIdsEntrada = $input['fotos_ids'] ?? [];
+$nombre     = trim((string) ($input['nombre'] ?? ''));
+$apellido   = trim((string) ($input['apellido'] ?? ''));
+$whatsapp   = trim((string) ($input['whatsapp'] ?? ''));
+$email      = trim((string) ($input['email'] ?? ''));
+$fotosEntrada = $input['fotos_ids'] ?? [];
 
-if ($eventoId <= 0) {
+if ($nombre === '' || $apellido === '' || $whatsapp === '') {
     http_response_code(400);
-    echo json_encode(["status" => "error", "message" => "El campo evento_id es obligatorio."], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-if ($nombre === '' || $apellido === '' || $whatsapp === '' || $total === '') {
-    http_response_code(400);
-    echo json_encode(["status" => "error", "message" => "Los campos nombre, apellido, whatsapp y total son obligatorios."], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["status" => "error", "message" => "Los campos nombre, apellido y whatsapp son obligatorios."], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -44,113 +33,162 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-if (!is_numeric($total) || (float) $total < 0) {
+// Normaliza fotos_ids (array o CSV) a lista de enteros
+$fotosIds = is_array($fotosEntrada) ? $fotosEntrada : explode(',', (string) $fotosEntrada);
+$fotosIds = array_filter(array_map('intval', $fotosIds), fn ($id) => $id > 0);
+$fotosIds = array_values(array_unique($fotosIds));
+
+if (empty($fotosIds)) {
     http_response_code(400);
-    echo json_encode(["status" => "error", "message" => "El total debe ser un número mayor o igual a 0."], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["status" => "error", "message" => "Seleccioná al menos una foto."], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-// Normaliza fotos_ids (array de enteros o string separado por comas) a una lista de enteros
-$fotosIds = [];
-if (is_array($fotosIdsEntrada)) {
-    foreach ($fotosIdsEntrada as $fid) {
-        $fid = (int) $fid;
-        if ($fid > 0) {
-            $fotosIds[] = $fid;
-        }
-    }
-} else {
-    foreach (explode(',', (string) $fotosIdsEntrada) as $fid) {
-        $fid = (int) trim($fid);
-        if ($fid > 0) {
-            $fotosIds[] = $fid;
-        }
-    }
-}
-$fotosIds = array_values(array_unique($fotosIds));
-$fotosIdsCsv = implode(',', $fotosIds);
-
 try {
-    // Verifica que el evento exista
-    $stmtEvento = $pdo->prepare("SELECT id, nombre, lugar FROM eventos WHERE id = ?");
-    $stmtEvento->execute([$eventoId]);
-    $evento = $stmtEvento->fetch();
+    // Lee las fotos con el evento y precio correspondiente (el total se calcula en el servidor)
+    $placeholders = implode(',', array_fill(0, count($fotosIds), '?'));
+    $stmtFotos = $pdo->prepare("
+        SELECT f.id, f.ruta, e.nombre AS evento_nombre, e.precio_foto
+        FROM fotos f
+        INNER JOIN eventos e ON e.id = f.evento_id
+        WHERE f.id IN ($placeholders)
+    ");
+    $stmtFotos->execute($fotosIds);
+    $fotos = $stmtFotos->fetchAll();
 
-    if (!$evento) {
-        http_response_code(404);
-        echo json_encode(["status" => "error", "message" => "Evento no encontrado."], JSON_UNESCAPED_UNICODE);
+    if (count($fotos) !== count($fotosIds)) {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Algunas fotos seleccionadas no existen."], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
-    $stmt = $pdo->prepare("INSERT INTO ventas (evento_id, nombre, apellido, whatsapp, email, total, fotos_ids, estado) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente')");
-    $stmt->execute([$eventoId, $nombre, $apellido, $whatsapp, $email, $total, $fotosIdsCsv]);
+    // Calcula el total sumando el precio de cada foto según su evento
+    $total = 0;
+    foreach ($fotos as $foto) {
+        $total += (float) $foto['precio_foto'];
+    }
+    $totalStr = number_format($total, 2, '.', '');
+
+    $pdo->beginTransaction();
+
+    $stmtVenta = $pdo->prepare("INSERT INTO ventas (nombre, apellido, whatsapp, email, total, estado) VALUES (?, ?, ?, ?, ?, 'pendiente')");
+    $stmtVenta->execute([$nombre, $apellido, $whatsapp, $email, $totalStr]);
     $ventaId = (int) $pdo->lastInsertId();
 
-    // Obtiene las rutas de las fotos solicitadas para el correo
-    $fotos = [];
-    if (!empty($fotosIds)) {
-        $placeholders = implode(',', array_fill(0, count($fotosIds), '?'));
-        $stmtFotos = $pdo->prepare("SELECT id, ruta FROM fotos WHERE id IN ($placeholders) ORDER BY id ASC");
-        $stmtFotos->execute($fotosIds);
-        $fotos = $stmtFotos->fetchAll();
-    }
-
-    $listaFotos = count($fotos) > 0 ? '' : '<li>Sin fotos especificadas</li>';
+    $stmtVf = $pdo->prepare("INSERT INTO venta_fotos (venta_id, foto_id, precio) VALUES (?, ?, ?)");
     foreach ($fotos as $foto) {
-        $listaFotos .= '<li>Foto ID ' . $foto['id'] . ' — Ruta: ' . $foto['ruta'] . '</li>';
+        $stmtVf->execute([$ventaId, $foto['id'], number_format((float) $foto['precio_foto'], 2, '.', '')]);
     }
 
-    $asunto = 'Nueva venta #' . $ventaId . ' - Evento: ' . $evento['nombre'];
+    // Crea la preferencia de pago en Mercado Pago
+    $items = [];
+    foreach ($fotos as $foto) {
+        $item = [
+            'id'          => (string) $foto['id'],
+            'title'       => 'Foto - ' . $foto['evento_nombre'],
+            'quantity'    => 1,
+            'unit_price'  => (float) $foto['precio_foto'],
+            'currency_id' => 'ARS',
+        ];
+        if (BACKEND_URL !== '') {
+            $item['picture_url'] = BACKEND_URL . '/' . $foto['ruta'];
+        }
+        $items[] = $item;
+    }
 
-    $cuerpo = '
-        <html>
-        <body style="font-family: Arial, sans-serif; color: #333;">
-            <h2 style="color: #2c3e50;">Nueva venta de fotos</h2>
-            <p>Se registró una nueva compra. Las fotos solicitadas deben enviarse manualmente al cliente.</p>
-            <h3>Datos de la venta</h3>
-            <table cellpadding="4" cellspacing="0">
-                <tr><td><strong>Nº de venta:</strong></td><td>' . $ventaId . '</td></tr>
-                <tr><td><strong>Evento:</strong></td><td>' . $evento['nombre'] . ' (' . $evento['lugar'] . ')</td></tr>
-                <tr><td><strong>Total:</strong></td><td>$ ' . number_format((float) $total, 2, ',', '.') . '</td></tr>
-                <tr><td><strong>Estado:</strong></td><td>pendiente</td></tr>
-            </table>
-            <h3>Datos del cliente</h3>
-            <table cellpadding="4" cellspacing="0">
-                <tr><td><strong>Nombre:</strong></td><td>' . $nombre . ' ' . $apellido . '</td></tr>
-                <tr><td><strong>WhatsApp:</strong></td><td>' . $whatsapp . '</td></tr>
-                <tr><td><strong>Email:</strong></td><td>' . $email . '</td></tr>
-            </table>
-            <h3>Fotos solicitadas</h3>
-            <ul>' . $listaFotos . '</ul>
-            <p>Recordá completar la venta y enviar las fotos al cliente.</p>
-        </body>
-        </html>
-    ';
+    $preferencia = [
+        'items'                => $items,
+        'external_reference'   => (string) $ventaId,
+        'statement_descriptor' => 'FOTOGRAFIAS',
+        'auto_return'          => 'approved',
+    ];
 
-    $cabeceras  = "MIME-Version: 1.0\r\n";
-    $cabeceras .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $cabeceras .= "From: no-reply@localhost\r\n";
+    if (BACKEND_URL !== '') {
+        $preferencia['notification_url'] = BACKEND_URL . '/webhook_mp.php';
+    }
 
-    $mailEnviado = mail($correoFotografa, $asunto, $cuerpo, $cabeceras);
+    $urlsWeb = array_filter([WEB_SUCCESS_URL, WEB_PENDING_URL, WEB_FAILURE_URL]);
+    if (count($urlsWeb) === 3) {
+        $preferencia['back_urls'] = [
+            'success' => WEB_SUCCESS_URL,
+            'pending' => WEB_PENDING_URL,
+            'failure' => WEB_FAILURE_URL,
+        ];
+    }
+
+    $respuesta = crearPreferenciaMP($preferencia);
+
+    if (($respuesta['success'] ?? false) === false) {
+        $pdo->rollBack();
+        http_response_code(502);
+        echo json_encode(["status" => "error", "message" => "No se pudo iniciar el pago en Mercado Pago: " . ($respuesta['message'] ?? 'error desconocido')], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $stmtUpd = $pdo->prepare("UPDATE ventas SET mp_preference_id = ? WHERE id = ?");
+    $stmtUpd->execute([$respuesta['preference_id'], $ventaId]);
+
+    $pdo->commit();
 
     echo json_encode([
         "status"        => "success",
-        "message"       => "Venta registrada en estado pendiente.",
-        "venta"         => [
-            "id"              => $ventaId,
-            "evento_id"       => $eventoId,
-            "nombre"          => $nombre,
-            "apellido"        => $apellido,
-            "whatsapp"        => $whatsapp,
-            "email"           => $email,
-            "total"           => $total,
-            "fotos_ids"       => $fotosIdsCsv,
-            "estado"          => "pendiente",
-        ],
-        "email_enviado" => $mailEnviado,
+        "message"       => "Venta registrada. Redirigiendo a Mercado Pago...",
+        "venta_id"      => $ventaId,
+        "mp_preference_id" => $respuesta['preference_id'],
+        "init_point"    => $respuesta['init_point'],
     ], JSON_UNESCAPED_UNICODE);
-} catch (PDOException $e) {
+} catch (Exception $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     http_response_code(500);
     echo json_encode(["status" => "error", "message" => "Error al registrar la venta: " . $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    exit;
+}
+
+/**
+ * Crea una preferencia de pago en Mercado Pago.
+ * @return array ['success' => bool, 'preference_id' => string, 'init_point' => string, 'message' => string]
+ */
+function crearPreferenciaMP(array $payload): array
+{
+    if (MP_ACCESS_TOKEN === '') {
+        return ['success' => false, 'message' => 'Access token de Mercado Pago no configurado.'];
+    }
+
+    $ch = curl_init(MP_BASE_URL . '/checkout/preferences');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . MP_ACCESS_TOKEN,
+        'Content-Type: application/json',
+        'Accept: application/json',
+    ]);
+
+    $respuestaRaw = curl_exec($ch);
+    $httpCode     = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError    = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlError !== '') {
+        return ['success' => false, 'message' => $curlError];
+    }
+
+    $respuesta = json_decode($respuestaRaw, true);
+
+    if ($httpCode >= 200 && $httpCode < 300 && isset($respuesta['id']) && isset($respuesta['init_point'])) {
+        return [
+            'success'       => true,
+            'preference_id' => (string) $respuesta['id'],
+            'init_point'    => (string) $respuesta['init_point'],
+        ];
+    }
+
+    $detalle = $respuesta['message'] ?? $respuesta['error'] ?? "HTTP $httpCode";
+    if (isset($respuesta['cause'][0]['description'])) {
+        $detalle .= ' - ' . $respuesta['cause'][0]['description'];
+    }
+
+    return ['success' => false, 'message' => $detalle];
 }
