@@ -75,18 +75,25 @@ try {
     $stmtVenta->execute([$nombre, $apellido, $whatsapp, $email, $totalStr]);
     $ventaId = (int) $pdo->lastInsertId();
 
-    $stmtVf = $pdo->prepare("INSERT INTO venta_fotos (venta_id, foto_id, precio) VALUES (?, ?, ?)");
+    $stmtVf = $pdo->prepare("INSERT INTO venta_fotos (venta_id, foto_id, precio, evento_nombre, foto_nombre) VALUES (?, ?, ?, ?, ?)");
     foreach ($fotos as $foto) {
-        $stmtVf->execute([$ventaId, $foto['id'], number_format((float) $foto['precio_foto'], 2, '.', '')]);
+        $stmtVf->execute([
+            $ventaId,
+            $foto['id'],
+            number_format((float) $foto['precio_foto'], 2, '.', ''),
+            $foto['evento_nombre'],
+            basename($foto['ruta']),
+        ]);
     }
 
     // Crea la order de pago en Mercado Pago (Orders API de Checkout Pro)
     $items = [];
     foreach ($fotos as $foto) {
+        $fotoNombre = basename($foto['ruta']);
         $item = [
             'external_code' => (string) $foto['id'],
-            'title'         => 'Foto - ' . $foto['evento_nombre'],
-            'description'   => 'Fotografía digital del evento ' . $foto['evento_nombre'],
+            'title'         => 'Foto ' . $fotoNombre . ' - ' . $foto['evento_nombre'],
+            'description'   => 'Fotografía digital del evento ' . $foto['evento_nombre'] . ' (' . $fotoNombre . ')',
             'quantity'      => 1,
             'unit_price'    => number_format((float) $foto['precio_foto'], 2, '.', ''),
         ];

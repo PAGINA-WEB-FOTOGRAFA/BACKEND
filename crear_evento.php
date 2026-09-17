@@ -14,6 +14,13 @@ $nombre      = trim((string) ($_POST['nombre'] ?? ''));
 $lugar       = trim((string) ($_POST['lugar'] ?? ''));
 $fechaEvento = trim((string) ($_POST['fecha_evento'] ?? ''));
 $precioFoto  = trim((string) ($_POST['precio_foto'] ?? ''));
+$activo      = isset($_POST['activo']) ? (int) $_POST['activo'] : 1;
+
+if (!in_array($activo, [0, 1], true)) {
+    http_response_code(400);
+    echo json_encode(["status" => "error", "message" => "El campo activo debe ser 0 o 1."], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 if ($nombre === '' || $lugar === '' || $fechaEvento === '' || $precioFoto === '') {
     http_response_code(400);
@@ -108,8 +115,8 @@ finfo_close($finfo);
 try {
     $pdo->beginTransaction();
 
-    $stmt = $pdo->prepare("INSERT INTO eventos (nombre, lugar, fecha_evento, precio_foto, portada) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$nombre, $lugar, $fechaEvento, $precioFoto, $portadaRuta]);
+    $stmt = $pdo->prepare("INSERT INTO eventos (nombre, lugar, fecha_evento, precio_foto, portada, activo) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$nombre, $lugar, $fechaEvento, $precioFoto, $portadaRuta, $activo]);
     $eventoId = (int) $pdo->lastInsertId();
 
     $stmtFoto = $pdo->prepare("INSERT INTO fotos (evento_id, ruta) VALUES (?, ?)");
@@ -134,7 +141,7 @@ try {
             "fecha_evento" => $fechaEvento,
             "precio_foto"  => $precioFoto,
             "portada"      => $portadaRuta,
-            "activo"       => 1,
+            "activo"       => $activo,
             "fotos"        => $fotosRegistradas,
         ],
     ], JSON_UNESCAPED_UNICODE);

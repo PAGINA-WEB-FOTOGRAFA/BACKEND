@@ -56,10 +56,9 @@ try {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
         $stmtFoto = $pdo->prepare("
-            SELECT vf.venta_id, vf.foto_id, vf.precio, fo.ruta, e.nombre AS evento_nombre
+            SELECT vf.venta_id, vf.foto_id, vf.precio, vf.evento_nombre, vf.foto_nombre, fo.ruta
             FROM venta_fotos vf
             INNER JOIN fotos fo ON fo.id = vf.foto_id
-            INNER JOIN eventos e ON e.id = fo.evento_id
             WHERE vf.venta_id IN ($placeholders)
             ORDER BY vf.venta_id, vf.id
         ");
@@ -69,10 +68,11 @@ try {
         $fotosPorVenta = [];
         foreach ($fotos as $foto) {
             $fotosPorVenta[$foto['venta_id']][] = [
-                'foto_id'      => (int) $foto['foto_id'],
-                'precio'       => $foto['precio'],
-                'ruta'         => $foto['ruta'],
-                'evento_nombre'=> $foto['evento_nombre'],
+                'foto_id'       => (int) $foto['foto_id'],
+                'precio'        => $foto['precio'],
+                'ruta'          => $foto['ruta'],
+                'evento_nombre' => $foto['evento_nombre'],
+                'foto_nombre'   => $foto['foto_nombre'],
             ];
         }
 
