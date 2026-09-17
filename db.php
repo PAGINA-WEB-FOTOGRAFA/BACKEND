@@ -1,10 +1,11 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+// Credenciales reales para DonWeb
 $host = "localhost";
-$db   = "fotografo_db";
-$user = "root";
-$pass = ""; // En Laragon por defecto va vacío
+$db   = "l0081231_foto_db";
+$user = "l0081231_foto_db";
+$pass = "biruRU95re";
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4", $user, $pass);
